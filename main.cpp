@@ -88,13 +88,13 @@ int main()
     fill(I_potential->begin(),I_potential->end(),-0.06);
     
     fill(E_dCon_E->begin(),E_dCon_E->end(),1);
-    fill(E_dCon_I->begin(),E_dCon_I->end(),4);
+    fill(E_dCon_I->begin(),E_dCon_I->end(),7);
     fill(E_Con_E->begin(),E_Con_E->end(),0);
     fill(E_Con_I->begin(),E_Con_I->end(),0);
     
-    fill(I_dCon_E->begin(),I_dCon_E->end(),5);
+    fill(I_dCon_E->begin(),I_dCon_E->end(),7);
     fill(I_Con_E->begin(),I_Con_E->end(),0);
-    cout<< "weight feedback 2 stdp 0.4" << endl;
+    cout<< "weight feedback 2 stdp 6 0.01" << endl;
     char train = 1;
     if(train == 1){
         struct timespec begin, end ;
@@ -165,7 +165,7 @@ int main()
                                 stan_dev = sqrt(vari);
                                 dev_after->at(j) = stan_dev;
                                 rate_dev->at(j) = dev_initial->at(j) / dev_after->at(j);
-                                //dev_initial->at(j) = stan_dev;
+                                dev_initial->at(j) = stan_dev;
                                 sum = 0;
                                 mean = 0;
                                 vari = 0;
@@ -175,13 +175,18 @@ int main()
                     }
                 }
             }
-            /*for (int j = 0; j<nE; ++j) {
-                cout << rate_dev->at(j) << ' ';
+            /*float p = 0;
+            for (int j = 0; j<nE; ++j) {
+                for (int k = 0; k < nInput ; ++k){
+                    p+=In_E_weight->at(k*nE+j);
+                }
+                cout << p << ' ';
                 if (j % 40 == 39) {
                     cout << endl;
                 }
-            }
-            cout << endl;*/
+                p = 0;
+            }*/
+            
 #pragma omp parallel
             {
                 float a_private = 0;
@@ -273,18 +278,16 @@ int main()
                 for (int j = 0; j<nE; ++j) {
                     b += E_dCon_E->at(j);
                 }
-                cout << "iter : " << i+1 << ' '<< "total : " << c<< " conductance : "<< b/1600<<endl;
-                c = 0;
-                b = 0;
-                weight_save(In_E_weight, nE, nInput, i);
-                acc = ((float)performance_count / train_gap) * 100;
-                cout << "iteration : " << i+1 <<" accuracy = " << acc << '%' << endl;
-                /*float k = 0;
+                float k = 0;
                 for (int m = 0; m<nE; ++m) {
                     k += stimulation.learn->at(m);
                     //cout << rate_dev->at(m) << ' ';
                 }
-                cout << "standard deviation: " << k/1600 <<endl;*/
+                acc = ((float)performance_count / train_gap) * 100;
+                cout << "iter : " << i+1 << ' '<< "total : " << c<< " conductance : "<< b/1600 <<" accuracy = " << acc<< "% learn: " << k/1600 <<endl;
+                c = 0;
+                b = 0;
+                weight_save(In_E_weight, nE, nInput, i);
                 performance_count = 0;
                 stimulation.set_index(train_gap, train_step);
                 for (int j = 0; j<nE; ++j) {

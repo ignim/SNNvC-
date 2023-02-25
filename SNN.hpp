@@ -76,6 +76,8 @@ public:
     
     vector<float> *E_spike_;
     vector<float> *I_spike_;
+    vector<float> *E_spike_previous = new vector<float>(nE_ * simulation_time_);
+    vector<float> *I_spike_previous = new vector<float>(nE_ * (simulation_time_+1));
     
     vector<float> *In_E_weight_;
     vector<float> *E_I_weight_;

@@ -158,6 +158,7 @@ void SNN::initializatoin(float &E_total_spike, int time, int iteration){
 #pragma omp for
         {
             for (int i = 0; i < nE_*time; i+=4) {
+                vst1q_f32(&(E_spike_previous->at(i)), vld1q_f32(&(E_spike_->at(i))));
                 vst1q_f32(&(E_spike_->at(i)), zero4);
                 vst1q_f32(&(input_data_->at(i)), zero4);
             }
@@ -165,6 +166,7 @@ void SNN::initializatoin(float &E_total_spike, int time, int iteration){
 #pragma omp for
         {
             for (int i = 0; i < nE_*(time+1); i+=4) {
+                vst1q_f32(&(I_spike_previous->at(i)), vld1q_f32(&(I_spike_->at(i))));
                 vst1q_f32(&(I_spike_->at(i)), zero4);
             }
         }
@@ -193,6 +195,8 @@ void SNN::Stimulation(int time, vector<float> *after_save){
     float32x4_t v_rest_I4 = vdupq_n_f32(v_rest_I);
 #pragma omp parallel
     {
+        float32x4_t verifying_E = temp4;
+        float32x4_t verifying_I = temp4;
         for (int i = 0; i < time; ++i) {
 #pragma omp single nowait
             {
@@ -204,19 +208,20 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                     float32x4_t E_rest = vdupq_n_f32(v_rest_E);
                     float32x4_t E_vE_E = vdupq_n_f32(vE_E);
                     float32x4_t E_vI_E = vdupq_n_f32(vI_E);
-                    vst1q_f32(&temp[j], vdupq_n_f32(0));
-                    if (i<5) {
-                        if(i != 0){
-                            for (int k = 0; k < i; ++k) {
-                                temp.at(j) += E_spike_->at(j*350 + k);
-                                temp.at(j+1) += E_spike_->at((j+1)*350 + k);
-                                temp.at(j+2) += E_spike_->at((j+2)*350 + k);
-                                temp.at(j+3) += E_spike_->at((j+3)*350 + k);
+                    
+                    if (i < 5) {
+                        float32x4_t E_Potential4 = vld1q_f32(&(E_potential_->at(j)));
+                        if (i == 0) {
+                            verifying_E = {vaddvq_f32(vld1q_f32(&E_spike_previous->at(j*time + time - 5))) + E_spike_previous->at(j*time + time - 1), vaddvq_f32(vld1q_f32(&E_spike_previous->at((j+1)*time + time - 5))) + E_spike_previous->at((j+1)*time + time - 1), vaddvq_f32(vld1q_f32(&E_spike_previous->at((j+2)*time + time - 5))) + E_spike_previous->at((j+2)*time + time - 1), vaddvq_f32(vld1q_f32(&E_spike_previous->at((j+3)*time + time - 5))) + E_spike_previous->at((j+3)*time + time - 1)};
+                        }
+                        else {
+                            for (int k = 5; k > 0; --k) {
+                                verifying_E[0] = verifying_E[0] - E_spike_previous->at(j*time + time - k) + E_spike_-> at(j*time + time - 5 - k);
+                                verifying_E[1] = verifying_E[1] - E_spike_previous->at((j+1)*time + time - k) + E_spike_-> at((j+1)*time + time - 5 - k);
+                                verifying_E[2] = verifying_E[2] - E_spike_previous->at((j+2)*time + time - k) + E_spike_-> at((j+2)*time + time - 5 - k);
+                                verifying_E[3] = verifying_E[3] - E_spike_previous->at((j+3)*time + time - k) + E_spike_-> at((j+3)*time + time - 5 - k);
                             }
                         }
-                        float32x4_t E_Potential4 = vld1q_f32(&(E_potential_->at(j)));
-                        float32x4_t verifying = vld1q_f32(&temp[j]);
-                        /* Sensory_gE = Sensory_gE * (1 - time_step / tau_syn_E) + np.sum(Sensory_ge_spike[:,:,i], axis = 0) * Sensory_gE_max */
                         
                         float32x4_t E_Con_E4 = vld1q_f32(&(E_Con_E_->at(j)));
                         float32x4_t input_data4;
@@ -274,7 +279,7 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                         E_Potential4 = vaddq_f32(E_Potential4, E_dPotential);
                         E_Potential4 = vmaxq_f32(v_reset_E4, E_Potential4);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and E_Potential4[k] > v_rest_E) {
+                            if (verifying_E[k] != 0 and E_Potential4[k] > v_rest_E) {
                                 E_Potential4[k] = v_rest_E;
                             }
                         }
@@ -299,7 +304,7 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                         float32x4_t verifying_1 = vld1q_f32(&(E_spike_->at((j+1)*350 + i-5)));
                         float32x4_t verifying_2 = vld1q_f32(&(E_spike_->at((j+2)*350 + i-5)));
                         float32x4_t verifying_3 = vld1q_f32(&(E_spike_->at((j+3)*350 + i-5)));
-                        float32x4_t verifying = {vaddvq_f32(verifying_0) + E_spike_->at(j*350 + i-1), vaddvq_f32(verifying_1) + E_spike_->at((j+1)*350 + i-1), vaddvq_f32(verifying_2) + E_spike_->at((j+2)*350 + i-1), vaddvq_f32(verifying_3) + E_spike_->at((j+3)*350 + i-1)};
+                        verifying_E = {vaddvq_f32(verifying_0) + E_spike_->at(j*350 + i-1), vaddvq_f32(verifying_1) + E_spike_->at((j+1)*350 + i-1), vaddvq_f32(verifying_2) + E_spike_->at((j+2)*350 + i-1), vaddvq_f32(verifying_3) + E_spike_->at((j+3)*350 + i-1)};
                         float32x4_t E_Potential4 = vld1q_f32(&(E_potential_->at(j)));
                         
                         /* Sensory_gE = Sensory_gE * (1 - time_step / tau_syn_E) + np.sum(Sensory_ge_spike[:,:,i], axis = 0) * Sensory_gE_max */
@@ -357,7 +362,7 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                         E_Potential4 = vaddq_f32(E_Potential4, E_dPotential);
                         E_Potential4 = vmaxq_f32(v_reset_E4, E_Potential4);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and E_Potential4[k] > v_rest_E) {
+                            if (verifying_E[k] != 0 and E_Potential4[k] > v_rest_E) {
                                 E_Potential4[k] = v_rest_E;
                             }
                         }
@@ -424,18 +429,20 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                 for (int j = 0; j < nE_; j+=4){
                     float32x4_t I_rest = vdupq_n_f32(v_rest_I);
                     float32x4_t I_vE_I = vdupq_n_f32(vE_I);
-                    vst1q_f32(&temp[j], vdupq_n_f32(0));
+                    
                     if (i<3) {
-                        if(i != 0){
-                            for (int k = 0; k < i; ++k) {
-                                temp.at(j) += I_spike_->at(j*350 + k);
-                                temp.at(j+1) += I_spike_->at((j+1)*350 + k);
-                                temp.at(j+2) += I_spike_->at((j+2)*350 + k);
-                                temp.at(j+3) += I_spike_->at((j+3)*350 + k);
+                        if (i == 0) {
+                            verifying_I = {vaddv_f32(vld1_f32(&I_spike_previous->at(j*(time+1) + (time+1) - 3))) + I_spike_previous->at(j*(time+1) + (time+1)), vaddv_f32(vld1_f32(&I_spike_previous->at((j+1)*(time+1) + (time+1) - 3))) + I_spike_previous->at((j+1)*(time+1) + (time+1) - 1), vaddv_f32(vld1_f32(&I_spike_previous->at((j+2)*(time+1) + (time+1) - 3))) + I_spike_previous->at((j+2)*(time+1) + (time+1) - 1), vaddv_f32(vld1_f32(&I_spike_previous->at((j+3)*(time+1) + (time+1) - 3))) + I_spike_previous->at((j+3)*(time+1) + (time+1) - 1)};
+                        }
+                        else {
+                            for (int k = 3; k > 0; --k) {
+                                verifying_I[0] = verifying_I[0] - I_spike_previous->at(j*(time+1) + (time+1) - k) + I_spike_-> at(j*time + time - 3 - k);
+                                verifying_I[1] = verifying_I[1] - I_spike_previous->at((j+1)*(time+1) + (time+1) - k) + I_spike_-> at((j+1)*(time+1) + (time+1) - 3 - k);
+                                verifying_I[2] = verifying_I[2] - I_spike_previous->at((j+2)*(time+1) + (time+1) - k) + I_spike_-> at((j+2)*(time+1) + (time+1) - 3 - k);
+                                verifying_I[3] = verifying_I[3] - I_spike_previous->at((j+3)*(time+1) + (time+1) - k) + I_spike_-> at((j+3)*(time+1) + (time+1) - 3 - k);
                             }
                         }
                         float32x4_t I_Potential4 = vld1q_f32(&(I_potential_->at(j)));
-                        float32x4_t verifying = vld1q_f32(&temp[j]);
                         
                         /* E_to_I_spike_data = weight_S_E * Sensory_spike[:,i] */
                         /* Inter_I_gE = Inter_I_gE * (1 - time_step / tau_syn_E) + E_to_I_spike_data * Inter_I_gE_max */
@@ -466,7 +473,7 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                         
                         I_Potential4 = vaddq_f32(I_Potential4, I_dPotential);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and I_Potential4[k] > v_reset_I) {
+                            if (verifying_I[k] != 0 and I_Potential4[k] > v_reset_I) {
                                 I_Potential4[k] = v_reset_I;
                             }
                         }
@@ -496,7 +503,7 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                         verifying_2[4] = 0;
                         verifying_3[4] = 0;
                         float32x4_t I_Potential4 = vld1q_f32(&(I_potential_->at(j)));
-                        float32x4_t verifying = {vaddvq_f32(verifying_0), vaddvq_f32(verifying_1), vaddvq_f32(verifying_2), vaddvq_f32(verifying_3)};
+                        verifying_I = {vaddvq_f32(verifying_0), vaddvq_f32(verifying_1), vaddvq_f32(verifying_2), vaddvq_f32(verifying_3)};
                         
                         /* E_to_I_spike_data = weight_S_E * Sensory_spike[:,i] */
                         /* Inter_I_gE = Inter_I_gE * (1 - time_step / tau_syn_E) + E_to_I_spike_data * Inter_I_gE_max */
@@ -526,7 +533,7 @@ void SNN::Stimulation(int time, vector<float> *after_save){
                         
                         I_Potential4 = vaddq_f32(I_Potential4, I_dPotential);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and I_Potential4[k] > v_reset_I) {
+                            if (verifying_I[k] != 0 and I_Potential4[k] > v_reset_I) {
                                 I_Potential4[k] = v_reset_I;
                             }
                         }
@@ -702,9 +709,9 @@ void SNN::STDP(int time, vector<float> *rate_dev){
                 if (rate_dev ->at(i) < 1 and E_spike_total_->at(i) != 0) {
                     learn ->at(i) *= rate_dev ->at(i);
                 }
-                else if (rate_dev ->at(i) < 1 and E_spike_total_->at(i) == 0) {
-                    learn ->at(i) += 0.005*(1-learn ->at(i));
-                }
+                /*else if (rate_dev ->at(i) < 1 and E_spike_total_->at(i) == 0) {
+                    learn ->at(i) += 0.001*(1-learn ->at(i));
+                }*/
             }
         }
 #pragma omp for
@@ -719,57 +726,10 @@ void SNN::STDP(int time, vector<float> *rate_dev){
                             post_spike.emplace_back(j);
                         }
                     }
-                    if (post_spike.size() == 2) {
+                    if (post_spike.size() > 1) {
                         for (int k = 0; k < nInput_ ; ++k){
                             for (iter = post_spike.begin(); iter != post_spike.end(); ++iter) {
-                                if (iter == post_spike.begin()) {
-                                    for (int m = *post_spike.begin(); m<*(post_spike.end()-1); ++m) {
-                                        if (train_data_temp->at(m*nInput_+k) == 1) {
-                                            pre_spike.emplace_back(m);
-                                        }
-                                    }
-                                    if (pre_spike.size() != 0) {
-                                        for (int l = 0; l<pre_spike.size(); ++l) {
-                                            if (iter == post_spike.begin()) {
-                                                In_E_weight_->at(k*nE_+i) += learn ->at(i) * 0.001 * exp(-1*(float)(post_spike.at(1) - pre_spike.at(l))/20)* pow(1-In_E_weight_->at(k*nE_+i), 0.9);
-                                            }
-                                            else if (l == pre_spike.size()-1) {
-                                                In_E_weight_->at(k*nE_+i) += learn ->at(i) * 0.001 * exp(-1*(float)(*(iter+1) - pre_spike.at(pre_spike.size()-1))/20)* pow(1-In_E_weight_->at(k*nE_+i), 0.9);
-                                            }
-                                            else if (In_E_weight_->at(k*nE_+i) < learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9)){
-                                                In_E_weight_->at(k*nE_+i) = 0;
-                                            }
-                                            else {
-                                                In_E_weight_->at(k*nE_+i) -= learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9);
-                                            }
-                                        }
-                                    }
-                                }
-                                else{
-                                    for (int m = *iter; m<time; ++m) {
-                                        if (train_data_temp->at(m*nInput_+k) == 1) {
-                                            pre_spike.emplace_back(m);
-                                        }
-                                    }
-                                    if (pre_spike.size() != 0) {
-                                        for (int l = 0; l<pre_spike.size(); ++l) {
-                                            if (In_E_weight_->at(k*nE_+i) < learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9)){
-                                                In_E_weight_->at(k*nE_+i) = 0;
-                                            }
-                                            else {
-                                                In_E_weight_->at(k*nE_+i) -= learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9);
-                                            }
-                                        }
-                                    }
-                                }
-                                pre_spike.clear();
-                            }
-                        }
-                    }
-                    else if (post_spike.size() >= 3) {
-                        for (int k = 0; k < nInput_ ; ++k){
-                            for (iter = post_spike.begin(); iter != post_spike.end(); ++iter) {
-                                if (iter <= (post_spike.end()-2)) {
+                                if (iter != (post_spike.end()-1)) {
                                     for (int m = *iter; m<*(iter+1); ++m) {
                                         if (train_data_temp->at(m*nInput_+k) == 1) {
                                             pre_spike.emplace_back(m);
@@ -777,22 +737,11 @@ void SNN::STDP(int time, vector<float> *rate_dev){
                                     }
                                     if (pre_spike.size() != 0) {
                                         for (int l = 0; l<pre_spike.size(); ++l) {
-                                            if (iter == post_spike.begin()) {
-                                                In_E_weight_->at(k*nE_+i) +=  learn ->at(i) * 0.001 * exp(-1*(float)(post_spike.at(1) - pre_spike.at(l))/20)* pow(1-In_E_weight_->at(k*nE_+i), 0.9);
-                                            }
-                                            else if (l == pre_spike.size()-1) {
-                                                In_E_weight_->at(k*nE_+i) +=  learn ->at(i) * 0.001 * exp(-1*(float)(*(iter+1) - pre_spike.at(pre_spike.size()-1))/20)* pow(1-In_E_weight_->at(k*nE_+i), 0.9);
-                                            }
-                                            else if (In_E_weight_->at(k*nE_+i) < 0.001* exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9)){
-                                                In_E_weight_->at(k*nE_+i) = 0;
-                                            }
-                                            else {
-                                                In_E_weight_->at(k*nE_+i) -= learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9);
-                                            }
+                                            In_E_weight_->at(k*nE_+i) += learn ->at(i) * 0.01 * exp(-1*(float)(*(iter+1) - pre_spike.at(l))/20)* pow(1-In_E_weight_->at(k*nE_+i), 0.9);
                                         }
                                     }
                                 }
-                                else{
+                                else if(iter == (post_spike.end()-1) and *(post_spike.end()-1) != 349) {
                                     for (int m = *iter; m<time; ++m) {
                                         if (train_data_temp->at(m*nInput_+k) == 1) {
                                             pre_spike.emplace_back(m);
@@ -800,11 +749,12 @@ void SNN::STDP(int time, vector<float> *rate_dev){
                                     }
                                     if (pre_spike.size() != 0) {
                                         for (int l = 0; l<pre_spike.size(); ++l) {
-                                            if (In_E_weight_->at(k*nE_+i) < learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9)){
+                                            float mm = learn ->at(i) * 0.01 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9);
+                                            if (In_E_weight_->at(k*nE_+i) < mm) {
                                                 In_E_weight_->at(k*nE_+i) = 0;
                                             }
                                             else {
-                                                In_E_weight_->at(k*nE_+i) -= learn ->at(i) * 0.001 * exp((float)(*iter - pre_spike.at(l))/40)*pow(In_E_weight_->at(k*nE_+i),0.9);
+                                                In_E_weight_->at(k*nE_+i) -= mm;
                                             }
                                         }
                                     }
@@ -845,6 +795,8 @@ void SNN::resting(int time){
     float32x4_t v_rest_I4 = vdupq_n_f32(v_rest_I);
 #pragma omp parallel
     {
+        float32x4_t verifying_E = temp4;
+        float32x4_t verifying_I = temp4;
         for (int i = 0; i < time; ++i) {
 #pragma omp for
             {
@@ -852,18 +804,20 @@ void SNN::resting(int time){
                     float32x4_t E_rest = vdupq_n_f32(v_rest_E);
                     float32x4_t E_vE_E = vdupq_n_f32(vE_E);
                     float32x4_t E_vI_E = vdupq_n_f32(vI_E);
-                    vst1q_f32(&temp[j], vdupq_n_f32(0));
+                    
                     if (i<5) {
-                        if(i != 0){
-                            for (int k = 0; k < i; ++k) {
-                                temp.at(j) += E_spike_->at(j*350 + k);
-                                temp.at(j+1) += E_spike_->at((j+1)*350 + k);
-                                temp.at(j+2) += E_spike_->at((j+2)*350 + k);
-                                temp.at(j+3) += E_spike_->at((j+3)*350 + k);
+                        float32x4_t E_Potential4 = vld1q_f32(&(E_potential_->at(j)));
+                        if (i == 0) {
+                            verifying_E = {vaddvq_f32(vld1q_f32(&E_spike_previous->at(j*time + time - 5))) + E_spike_previous->at(j*time + time - 1), vaddvq_f32(vld1q_f32(&E_spike_previous->at((j+1)*time + time - 5))) + E_spike_previous->at((j+1)*time + time - 1), vaddvq_f32(vld1q_f32(&E_spike_previous->at((j+2)*time + time - 5))) + E_spike_previous->at((j+2)*time + time - 1), vaddvq_f32(vld1q_f32(&E_spike_previous->at((j+3)*time + time - 5))) + E_spike_previous->at((j+3)*time + time - 1)};
+                        }
+                        else {
+                            for (int k = 5; k > 0; --k) {
+                                verifying_E[0] = verifying_E[0] - E_spike_previous->at(j*time + time - k) + E_spike_-> at(j*time + time - 5 - k);
+                                verifying_E[1] = verifying_E[1] - E_spike_previous->at((j+1)*time + time - k) + E_spike_-> at((j+1)*time + time - 5 - k);
+                                verifying_E[2] = verifying_E[2] - E_spike_previous->at((j+2)*time + time - k) + E_spike_-> at((j+2)*time + time - 5 - k);
+                                verifying_E[3] = verifying_E[3] - E_spike_previous->at((j+3)*time + time - k) + E_spike_-> at((j+3)*time + time - 5 - k);
                             }
                         }
-                        float32x4_t E_Potential4 = vld1q_f32(&(E_potential_->at(j)));
-                        float32x4_t verifying = vld1q_f32(&temp[j]);
                         
                         /* Sensory_gE = Sensory_gE * (1 - time_step / tau_syn_E) + np.sum(Sensory_ge_spike[:,:,i], axis = 0) * Sensory_gE_max */
                         
@@ -923,7 +877,7 @@ void SNN::resting(int time){
                         E_Potential4 = vaddq_f32(E_Potential4, E_dPotential);
                         E_Potential4 = vmaxq_f32(v_reset_E4, E_Potential4);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and E_Potential4[k] > v_rest_E) {
+                            if (verifying_E[k] != 0 and E_Potential4[k] > v_rest_E) {
                                 E_Potential4[k] = v_rest_E;
                             }
                         }
@@ -947,7 +901,7 @@ void SNN::resting(int time){
                         float32x4_t verifying_1 = vld1q_f32(&(E_spike_->at((j+1)*350 + i-5)));
                         float32x4_t verifying_2 = vld1q_f32(&(E_spike_->at((j+2)*350 + i-5)));
                         float32x4_t verifying_3 = vld1q_f32(&(E_spike_->at((j+3)*350 + i-5)));
-                        float32x4_t verifying = {vaddvq_f32(verifying_0) + E_spike_->at(j*350 + i-1), vaddvq_f32(verifying_1) + E_spike_->at((j+1)*350 + i-1), vaddvq_f32(verifying_2) + E_spike_->at((j+2)*350 + i-1), vaddvq_f32(verifying_3) + E_spike_->at((j+3)*350 + i-1)};
+                        verifying_E = {vaddvq_f32(verifying_0) + E_spike_->at(j*350 + i-1), vaddvq_f32(verifying_1) + E_spike_->at((j+1)*350 + i-1), vaddvq_f32(verifying_2) + E_spike_->at((j+2)*350 + i-1), vaddvq_f32(verifying_3) + E_spike_->at((j+3)*350 + i-1)};
                         float32x4_t E_Potential4 = vld1q_f32(&(E_potential_->at(j)));
                         
                         /* Sensory_gE = Sensory_gE * (1 - time_step / tau_syn_E) + np.sum(Sensory_ge_spike[:,:,i], axis = 0) * Sensory_gE_max */
@@ -1004,7 +958,7 @@ void SNN::resting(int time){
                         E_Potential4 = vaddq_f32(E_Potential4, E_dPotential);
                         E_Potential4 = vmaxq_f32(v_reset_E4, E_Potential4);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and E_Potential4[k] > v_rest_E) {
+                            if (verifying_E[k] != 0 and E_Potential4[k] > v_rest_E) {
                                 E_Potential4[k] = v_rest_E;
                             }
                         }
@@ -1032,18 +986,20 @@ void SNN::resting(int time){
                 for (int j = 0; j < nE_; j+=4){
                     float32x4_t I_rest = vdupq_n_f32(v_rest_I);
                     float32x4_t I_vE_I = vdupq_n_f32(vE_I);
-                    vst1q_f32(&temp[j], vdupq_n_f32(0));
+                    
                     if (i<3) {
-                        if(i != 0){
-                            for (int k = 0; k < i; ++k) {
-                                temp.at(j) += I_spike_->at(j*350 + k);
-                                temp.at(j+1) += I_spike_->at((j+1)*350 + k);
-                                temp.at(j+2) += I_spike_->at((j+2)*350 + k);
-                                temp.at(j+3) += I_spike_->at((j+3)*350 + k);
+                        if (i == 0) {
+                            verifying_I = {vaddv_f32(vld1_f32(&I_spike_previous->at(j*(time+1) + (time+1) - 3))) + I_spike_previous->at(j*(time+1) + (time+1)), vaddv_f32(vld1_f32(&I_spike_previous->at((j+1)*(time+1) + (time+1) - 3))) + I_spike_previous->at((j+1)*(time+1) + (time+1) - 1), vaddv_f32(vld1_f32(&I_spike_previous->at((j+2)*(time+1) + (time+1) - 3))) + I_spike_previous->at((j+2)*(time+1) + (time+1) - 1), vaddv_f32(vld1_f32(&I_spike_previous->at((j+3)*(time+1) + (time+1) - 3))) + I_spike_previous->at((j+3)*(time+1) + (time+1) - 1)};
+                        }
+                        else {
+                            for (int k = 3; k > 0; --k) {
+                                verifying_I[0] = verifying_I[0] - I_spike_previous->at(j*(time+1) + (time+1) - k) + I_spike_-> at(j*time + time - 3 - k);
+                                verifying_I[1] = verifying_I[1] - I_spike_previous->at((j+1)*(time+1) + (time+1) - k) + I_spike_-> at((j+1)*(time+1) + (time+1) - 3 - k);
+                                verifying_I[2] = verifying_I[2] - I_spike_previous->at((j+2)*(time+1) + (time+1) - k) + I_spike_-> at((j+2)*(time+1) + (time+1) - 3 - k);
+                                verifying_I[3] = verifying_I[3] - I_spike_previous->at((j+3)*(time+1) + (time+1) - k) + I_spike_-> at((j+3)*(time+1) + (time+1) - 3 - k);
                             }
                         }
                         float32x4_t I_Potential4 = vld1q_f32(&(I_potential_->at(j)));
-                        float32x4_t verifying = vld1q_f32(&temp[j]);
                         
                         /* E_to_I_spike_data = weight_S_E * Sensory_spike[:,i] */
                         /* Inter_I_gE = Inter_I_gE * (1 - time_step / tau_syn_E) + E_to_I_spike_data * Inter_I_gE_max */
@@ -1074,7 +1030,7 @@ void SNN::resting(int time){
                         
                         I_Potential4 = vaddq_f32(I_Potential4, I_dPotential);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and I_Potential4[k] > v_reset_I) {
+                            if (verifying_I[k] != 0 and I_Potential4[k] > v_reset_I) {
                                 I_Potential4[k] = v_reset_I;
                             }
                         }
@@ -1103,7 +1059,7 @@ void SNN::resting(int time){
                         verifying_2[4] = 0;
                         verifying_3[4] = 0;
                         float32x4_t I_Potential4 = vld1q_f32(&(I_potential_->at(j)));
-                        float32x4_t verifying = {vaddvq_f32(verifying_0), vaddvq_f32(verifying_1), vaddvq_f32(verifying_2), vaddvq_f32(verifying_3)};
+                        verifying_I = {vaddvq_f32(verifying_0), vaddvq_f32(verifying_1), vaddvq_f32(verifying_2), vaddvq_f32(verifying_3)};
                         
                         /* E_to_I_spike_data = weight_S_E * Sensory_spike[:,i] */
                         /* Inter_I_gE = Inter_I_gE * (1 - time_step / tau_syn_E) + E_to_I_spike_data * Inter_I_gE_max */
@@ -1133,7 +1089,7 @@ void SNN::resting(int time){
                         
                         I_Potential4 = vaddq_f32(I_Potential4, I_dPotential);
                         for (int k = 0; k < 4; ++k) {
-                            if (verifying[k] != 0 and I_Potential4[k] > v_reset_I) {
+                            if (verifying_I[k] != 0 and I_Potential4[k] > v_reset_I) {
                                 I_Potential4[k] = v_reset_I;
                             }
                         }
