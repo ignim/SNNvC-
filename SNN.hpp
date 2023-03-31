@@ -9,7 +9,7 @@
 #define SNN_hpp
 
 #include <stdio.h>
-#include <iostream>
+#include <iostream>  
 #include <vector>
 #include <fstream>
 #include <string>
@@ -32,85 +32,112 @@ public:
     int nI_;
     int nInput_;
     int data_on = 0;
-    int iteration;
-    float interval_;
-    int while_iter;
+    int iteration_;
+    double interval_;
     int total_data_;
     int epoch_;
-    float time_step = 0.001;
+    int train_gap_;
+    double time_step_;
+    int refractory_e = (int)(0.005/time_step_);
+    int subtraction = (int)(0.04/time_step_);
+    int addition = (int)(0.02/time_step_);
     
-    float vI_E = -0.1;
-    float vE_E = 0;
     
-    float vE_I = 0.0;
+    double vI_E = -0.1;
+    double vE_E = 0;
     
-    float gL = 1.0;
+    double vE_I = 0;
+    
+    double gL = 1;
 
-    float v_rest_E = -0.065;
-    float v_rest_I = -0.06;
-    float v_reset_E = -0.065;
-    float v_reset_I = -0.045;
+    double v_rest_E = -0.065;
+    //double v_rest_I = -0.06f;
+    double v_reset_E = -0.065;
+    //double v_reset_I = -0.045f;
 
-    float v_thresh_E = -0.052;
-    float v_thresh_I = -0.04;
+    double v_thresh_E = -0.052;
+    //double v_thresh_I = -0.04f;
 
-    float tau_E = 0.1;
-    float tau_I = 0.01;
+    double tau_E = 0.1;
+    double tau_I = 0.01;
 
-    float tau_syn_E = 0.001;
-    float tau_syn_I = 0.002;
+    double tau_syn_E = 0.001;
+    double tau_syn_I = 0.002;
     
-    vector<float> train_data_;
+    vector<double> &train_data_;
     
-    vector<float> *input_data_;
-    vector<float> *E_potential_;
-    vector<float> *I_potential_;
+    //vector<double> &input_data_;
+    vector<double> &E_potential_;
+    //vector<double> &I_potential_;
     
-    vector<float> *E_dCon_E_;
-    vector<float> *E_dCon_I_;
-    vector<float> *E_Con_E_;
-    vector<float> *E_Con_I_;
+    vector<double> &E_dCon_E_;
+    vector<double> &E_dCon_I_;
+    vector<double> &E_Con_E_;
+    vector<double> &E_Con_I_;
     
-    vector<float> *I_dCon_E_;
-    vector<float> *I_Con_E_;
+    int neuron_exclusion = 0;
+    /*vector<double> &I_dCon_E_;
+    vector<double> &I_Con_E_;*/
     
-    vector<float> *E_spike_;
-    vector<float> *I_spike_;
-    vector<float> *E_spike_previous = new vector<float>(nE_ * simulation_time_);
-    vector<float> *I_spike_previous = new vector<float>(nE_ * (simulation_time_+1));
+    vector<int> &E_spike_;
+    //vector<double> &I_spike_;
+    //vector<double> &E_spike_previousvector<double> &(nE_);
+    //vector<double> &I_spike_previousvector<double> &(nE_ * (simulation_time_+1));
+    vector<double> *I_data = new vector<double>(nE_*simulation_time_,0);
     
-    vector<float> *In_E_weight_;
-    vector<float> *E_I_weight_;
-    vector<float> *I_E_weight_;
+    vector<double> &In_E_weight_;
+    //vector<double> &E_I_weight_;
+    vector<double> &I_E_weight_;
     
-    vector<float> *E_spike_total_;
-    vector<float> *train_data_temp = new vector<float>(nInput_*simulation_time_);
-    vector<float> *index_num = new vector<float>(total_data_*epoch_);
-    vector<float> *neuron_index_num_;
-    vector<float> *neuron_index_;
-    vector<float> *learn = new vector<float>(nE_,1);
-    //vector<float> *I_potential_mem = new vector<float>(nE_);
-    //vector<float> *E_Con_E_mem = new vector<float>(nE_);
-    //vector<float> *E_Con_I_mem = new vector<float>(nE_);
-    //vector<float> *I_Con_E_mem = new vector<float>(nE_);
-    //vector<float> *E_dCon_E_mem = new vector<float>(nE_);
-    vector<float> *rate_;
-protected:
-    
+    vector<int> &E_spike_total_;
+    vector<int> *train_data_temp = new vector<int>(nInput_*simulation_time_,0);
+    vector<int> *input_data_copy = new vector<int>(nE_*simulation_time_,0);
+    vector<int> *index_num = new vector<int>(train_gap_,0);
+    vector<int> &neuron_index_num_;
+    vector<int> &neuron_index_;
+    vector<double> *learn = new vector<double>(nE_,1);
+    vector<int> *learn_stable = new vector<int>(nE_,1);
+    int* learn_stable_ptr = learn_stable->data();
+    vector<int> *verifying_E = new vector<int>(nE_,0);
+    vector<double> *E_potential_capacitance = new vector<double>(nE_*simulation_time_, 0);
+    int* E_spike_total_ptr = E_spike_total_.data();
+    double* E_potential_capacitance_ptr = E_potential_capacitance->data();
+    int* train_data_temp_ptr = train_data_temp->data();
+    int* E_spike_ptr = E_spike_.data();
+    int* input_data_copy_ptr = input_data_copy->data();
+    double* train_data_ptr = train_data_.data();
+    double* In_E_weight_ptr = In_E_weight_.data();
+    double* E_potential_ptr = E_potential_.data();
+    double* E_Con_E_ptr = E_Con_E_.data();
+    double* E_dCon_E_ptr = E_dCon_E_.data();
+    double* I_data_ptr = I_data->data();
+    double* E_Con_I_ptr = E_Con_I_.data();
+    double* E_dCon_I_ptr = E_dCon_I_.data();
+    double* I_E_weight_prt = I_E_weight_.data();
+    int* verifying_E_ptr = verifying_E->data();
+    int* neuron_index_ptr = neuron_index_.data();
+    int* index_num_ptr = index_num->data();
+    int* neuron_index_num_ptr = neuron_index_num_.data();
+    //vector<double> &rate_devvector<double> &(nE_,1);
+    //vector<double> &dev_initialvector<double> &(nE_,1);
+    //vector<double> &dev_aftervector<double> &(nE_,1);
     
     
     
 public:
-    SNN(vector<float> &train_data, vector<float> *input_data, vector<float> *E_potential, vector<float> *I_potential, vector<float> *E_dCon_E, vector<float> *E_dCon_I, vector<float> *E_Con_E, vector<float> *E_Con_I, vector<float> *I_dCon_E, vector<float> *I_Con_E, vector<float> *E_spike, vector<float> *I_spike, vector<float> *In_E_weight, vector<float> *E_I_weight, vector<float> *I_E_weight, vector<float> *E_spike_total, vector<float> *neuron_index_num, vector<float> *neuron_index, int nE, int nInput, int simulation_time, float &interval, vector<float> *rate, int total_data, int epoch) : train_data_(train_data), input_data_(input_data), E_potential_(E_potential), I_potential_(I_potential), E_dCon_E_(E_dCon_E), E_dCon_I_(E_dCon_I), E_Con_E_(E_Con_E), E_Con_I_(E_Con_I), I_dCon_E_(I_dCon_E), I_Con_E_(I_Con_E), E_spike_(E_spike), I_spike_(I_spike), In_E_weight_(In_E_weight), E_I_weight_(E_I_weight), I_E_weight_(I_E_weight), E_spike_total_(E_spike_total), nE_(nE), nI_(nE), nInput_(nInput), simulation_time_(simulation_time), neuron_index_num_(neuron_index_num), neuron_index_(neuron_index), interval_(interval), rate_(rate), total_data_(total_data), epoch_(epoch){}
-    void set_initial(int iteration);
+    SNN(vector<double> &train_data, vector<double> &E_potential, vector<double> &E_dCon_E, vector<double> &E_dCon_I, vector<double> &E_Con_E, vector<double> &E_Con_I, vector<int> &E_spike, vector<double> &In_E_weight, vector<double> &I_E_weight, vector<int> &E_spike_total, vector<int> &neuron_index_num, vector<int> &neuron_index, int nE, int nInput, int simulation_time, double &interval, int total_data, int epoch, int train_gap, double time_step) : train_data_(train_data), E_potential_(E_potential),  E_dCon_E_(E_dCon_E), E_dCon_I_(E_dCon_I), E_Con_E_(E_Con_E), E_Con_I_(E_Con_I), E_spike_(E_spike), In_E_weight_(In_E_weight), I_E_weight_(I_E_weight), E_spike_total_(E_spike_total), nE_(nE), nI_(nE), nInput_(nInput), simulation_time_(simulation_time), neuron_index_num_(neuron_index_num), neuron_index_(neuron_index), interval_(interval), total_data_(total_data), epoch_(epoch), train_gap_(train_gap), time_step_(time_step) {}
+    /*SNN(vector<double> &train_data, vector<double> &input_data, vector<double> &E_potential, vector<double> &I_potential, vector<double> &E_dCon_E, vector<double> &E_dCon_I, vector<double> &E_Con_E, vector<double> &E_Con_I, vector<double> &I_dCon_E, vector<double> &I_Con_E, vector<double> &E_spike, vector<double> &I_spike, vector<double> &In_E_weight, vector<double> &E_I_weight, vector<double> &I_E_weight, vector<double> &E_spike_total, vector<double> &neuron_index_num, vector<double> &neuron_index, int nE, int nInput, int simulation_time, double &interval, vector<double> &rate, int total_data, int epoch) : train_data_(train_data), input_data_(input_data), E_potential_(E_potential), I_potential_(I_potential), E_dCon_E_(E_dCon_E), E_dCon_I_(E_dCon_I), E_Con_E_(E_Con_E), E_Con_I_(E_Con_I), I_dCon_E_(I_dCon_E), I_Con_E_(I_Con_E), E_spike_(E_spike), I_spike_(I_spike), In_E_weight_(In_E_weight), E_I_weight_(E_I_weight), I_E_weight_(I_E_weight), E_spike_total_(E_spike_total), nE_(nE), nI_(nE), nInput_(nInput), simulation_time_(simulation_time), neuron_index_num_(neuron_index_num), neuron_index_(neuron_index), interval_(interval), rate_(rate), total_data_(total_data), epoch_(epoch){}*/
+    void set_initial(int iteration, double interval);
     //void setting_for_proceeding(int time);
-    void poisson_spike_generator(int time);
-    void initializatoin(float &E_total_spike, int time, int iteration);
-    void Stimulation(int time, vector<float> *after_save);
-    void process_data(vector<float> *neuron_index_num, int train_label, int &performance_count, int iter, int total_data, int epoch);
-    void STDP(int time, vector<float> *rate_dev);
-    void set_index(int train_gap, int train_step);
-    void resting(int time);
+    //void poisson_spike_generator(int time);
+    void initializatoin(int &E_total_spike, int time, int iteration);
+    void Stimulation(int time, vector<double> &after_save, vector<int> &E_spike_total, int &E_total_spike, double* weight_check_ptr, int train_label);
+    void process_data(int train_label, int &performance_count, int iter, int total_data, int epoch, int train_gap);
+    //void STDP(int time);
+    void set_index(int train_gap, int train_step, int iteration);
+    void resting(int time, vector<double> &after_save);
+    void normalization(vector<double> &In_E, int nInput, int nE);
+    //void spike_total(vector<double> &E_spike, vector<double> &E_spike_total, int nE, int simulate_time, double &E_total_spike);
 };
 
 #endif /* SNN_hpp */

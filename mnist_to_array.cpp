@@ -9,6 +9,7 @@
 #include <iostream>
 #include <vector>
 #include <fstream>
+#include <cstring>  
 #include <string>
 #include <iomanip>
 #include <time.h>
@@ -23,7 +24,7 @@
 
 
 using namespace std;
-using namespace cv;;
+using namespace cv;
 
 int ReverseInt(int i)
 {
@@ -34,7 +35,7 @@ int ReverseInt(int i)
    ch4 = (i >> 24) & 255;
    return((int)ch1 << 24) + ((int)ch2 << 16) + ((int)ch3 << 8) + ch4;
 }
-void ReadMNIST(int NumberOfImages, int DataOfAnImage, vector<float> &arr, char train_or_test)   // MNIST데이터를 읽어온다.
+void ReadMNIST(int NumberOfImages, int DataOfAnImage, vector<double> &arr, char train_or_test)   // MNIST데이터를 읽어온다.
 {
    arr.resize(NumberOfImages * DataOfAnImage);
    if (train_or_test == 1) {
@@ -58,7 +59,7 @@ void ReadMNIST(int NumberOfImages, int DataOfAnImage, vector<float> &arr, char t
            {
                unsigned char temp = 0;
                file.read((char*)&temp, sizeof(temp));
-               arr[i] = (float)temp;
+               arr[i] = (double)temp;
   
            }
        }
@@ -85,7 +86,7 @@ void ReadMNIST(int NumberOfImages, int DataOfAnImage, vector<float> &arr, char t
            {
                unsigned char temp = 0;
                file.read((char*)&temp, sizeof(temp));
-               arr[i] = (float)temp;
+               arr[i] = (double)temp;
   
            }
        }
@@ -111,110 +112,18 @@ void ReadMNISTLabel(int NumberOfImages, vector<int> &arr, char train_or_test){
            unsigned char temp = 0;
            file.read((char*)&temp, sizeof(temp));
            if (i > 7)
-               arr.push_back((unsigned char)temp);
+               arr.push_back((int)temp);
     
        }
    }
-   
 }
 
-
-void normalization(vector<float> *In_E, int nInput, int nE){
-    vector<float> temp(nE);
-    float32x4_t scalar_vector = vdupq_n_f32(78.0f);
-#pragma omp parallel
-    {
-#pragma omp for
-        {
-            for (int i = 0; i<nE; i+=4) {
-                vst1q_f32(&temp[i], vdupq_n_f32(0));
-            }
-        }
-#pragma omp for
-        {
-            for (int j = 0; j < nE; ++j) {
-                for (int i = 0; i < nInput; i+=4) {
-                    float32x4_t weight;
-                    weight[0]=  In_E->at(i*nE + j);
-                    weight[1]=  In_E->at((i+1)*nE + j);
-                    weight[2]=  In_E->at((i+2)*nE + j);
-                    weight[3]=  In_E->at((i+3)*nE + j);
-                    temp[j] += vaddvq_f32(weight);
-                }
-            }
-        }
-#pragma omp for
-        {
-            for (int i = 0; i < nE; i+=4) {
-                float32x4_t temp4 = vld1q_f32(&temp[i]);
-                float32x4_t result = vdivq_f32(scalar_vector, temp4);
-                vst1q_f32(&temp[i], result);
-            }
-        }
-#pragma omp for
-        {
-            for (int j = 0; j < nE; ++j)  {
-                for (int i = 0; i < nInput; i+=4) {
-                    float32x4_t weight;
-                    weight[0]=  In_E->at(i*nE + j);
-                    weight[1]=  In_E->at((i+1)*nE + j);
-                    weight[2]=  In_E->at((i+2)*nE + j);
-                    weight[3]=  In_E->at((i+3)*nE + j);
-                    float32x4_t result = vmulq_n_f32(weight, temp[j]);
-                    In_E->at(i*nE + j) =  result[0];
-                    In_E->at((i+1)*nE + j) =  result[1];
-                    In_E->at((i+2)*nE + j) =  result[2];
-                    In_E->at((i+3)*nE + j) =  result[3];
-                }
-            }
-        }
-    }
-}
-
-void spike_total(vector<float> *E_spike, vector<float> *E_spike_total, int nE, int simulate_time, float &E_total_spike){
-    float E_total_spike_temp = 0.0f;
-#pragma omp parallel
-    {
-        float E_total_spike_temp_private = 0;
-#pragma omp for
-        {
-            for (int i = 0; i<nE; ++i) {
-                for (int j = 0; j<simulate_time; j+=2) {
-                    float32x2_t neuron;
-                    neuron[0] = E_spike->at(i*simulate_time+j);
-                    neuron[1] = E_spike->at(i*simulate_time+j+1);
-                    float neuron_add = vaddv_f32(neuron);
-                    E_spike_total->at(i) += neuron_add;
-                }
-            }
-        }
-#pragma omp for
-        {
-            for (int i = 0; i<nE; i+=4) {
-                float32x4_t total_spike = vld1q_f32(&E_spike_total->at(i));
-                E_total_spike_temp_private += vaddvq_f32(total_spike);
-            }
-        }
-#pragma omp critical
-            {
-                E_total_spike_temp += E_total_spike_temp_private;
-            }
-    }
-    E_total_spike = E_total_spike_temp;
-}
-
-void weight_save(vector<float> *In_E_weight, int nE, int nInput, int iteration){
-    float data[28*40][28*40];
+void weight_save(vector<double> &In_E_weight, vector<double> &E_dCon_E, vector<double> &E_dCon_I, vector<double> &E_Con_E, vector<double> &E_Con_I, vector<double> &E_potential, vector<int> &neuron_index, int nE, int nInput, int iteration) {
     int sqrt_nE = (int)sqrt(nE);
     int sqrt_nInput = (int)sqrt(nInput);
-    stringstream ss;
-    string type = ".jpg";
-    string str1 = to_string(iteration+1);
-    string location = "image/";
-    ss<<location << str1 <<type;
-    string filename = ss.str();
-    ss.str("");
-    // size(width, height)
+    int a  = sqrt_nInput*sqrt_nE;
+    int b = nE*nInput;
+    Mat img(Size(a,a), CV_64FC1);
 #pragma omp parallel
     {
 #pragma omp for
@@ -223,15 +132,99 @@ void weight_save(vector<float> *In_E_weight, int nE, int nInput, int iteration){
                 for (int j = 0; j<sqrt_nE; ++j){
                     for (int k = 0; k < sqrt_nInput; ++k) {
                         for (int l = 0; l < sqrt_nInput; ++l){
-                            data[i*sqrt_nInput+k][j*sqrt_nInput+l] = In_E_weight->at((k*sqrt_nInput+l)*nE + i*sqrt_nE+j);
+                            img.at<double>(i*sqrt_nInput+k,j*sqrt_nInput+l) = 0;
                         }
                     }
                 }
             }
         }
     }
-    Mat image(Size(28*40, 28*40), CV_8UC1);
-    Mat img(Size(28*40, 28*40), CV_32FC1, data);
+    stringstream ss;
+    string type = ".jpg";
+    string str1 = to_string(iteration+1);
+    string location = "image/";
+    ss<<location << str1 <<type;
+    string filename = ss.str();
+    ss.str("");
+    
+    unsigned long size_In_E_weight = In_E_weight.size();
+    stringstream In_E_weight_f;
+    In_E_weight_f<<"weight/" << "In_E_weight_" <<str1<<".bin";
+    string In_E_weight_filename = In_E_weight_f.str();
+    In_E_weight_f.str("");
+    ofstream In_E_weight_outfile(In_E_weight_filename, ios::out | ios::binary);
+    In_E_weight_outfile.write(reinterpret_cast<const char*>(In_E_weight.data()), size_In_E_weight * sizeof(double));
+    In_E_weight_outfile.close();
+    
+    unsigned long size_E_dCon_E = E_dCon_E.size();
+    stringstream E_dCon_E_f;
+    E_dCon_E_f<<"weight/" << "E_dCon_E_" <<str1<<".bin";
+    string E_dCon_E_filename = E_dCon_E_f.str();
+    E_dCon_E_f.str("");
+    ofstream E_dCon_E_outfile(E_dCon_E_filename, ios::out | ios::binary);
+    E_dCon_E_outfile.write(reinterpret_cast<const char*>(E_dCon_E.data()), size_E_dCon_E * sizeof(double));
+    E_dCon_E_outfile.close();
+    
+    unsigned long size_E_Con_E = E_Con_E.size();
+    stringstream E_Con_E_f;
+    E_Con_E_f<<"weight/" << "E_Con_E_" <<str1<<".bin";
+    string E_Con_E_filename = E_Con_E_f.str();
+    E_Con_E_f.str("");
+    ofstream E_Con_E_outfile(E_Con_E_filename, ios::out | ios::binary);
+    E_Con_E_outfile.write(reinterpret_cast<const char*>(E_Con_E.data()), size_E_Con_E * sizeof(double));
+    E_Con_E_outfile.close();
+    
+    unsigned long size_E_Con_I = E_Con_I.size();
+    stringstream E_Con_I_f;
+    E_Con_I_f<<"weight/" << "E_Con_I_" <<str1<<".bin";
+    string E_Con_I_filename = E_Con_I_f.str();
+    E_Con_I_f.str("");
+    ofstream E_Con_I_outfile(E_Con_I_filename, ios::out | ios::binary);
+    E_Con_I_outfile.write(reinterpret_cast<const char*>(E_Con_I.data()), size_E_Con_I * sizeof(double));
+    E_Con_I_outfile.close();
+    
+    unsigned long size_E_potential = E_potential.size();
+    stringstream E_potential_f;
+    E_potential_f<<"weight/" << "E_potential_" <<str1<<".bin";
+    string E_potential_filename = E_potential_f.str();
+    E_potential_f.str("");
+    ofstream E_potential_outfile(E_potential_filename, ios::out | ios::binary);
+    E_potential_outfile.write(reinterpret_cast<const char*>(E_potential.data()), size_E_potential * sizeof(double));
+    E_potential_outfile.close();
+    
+    unsigned long size_neuron_index = neuron_index.size();
+    stringstream neuron_index_f;
+    neuron_index_f<<"weight/" << "neuron_index_" <<str1<<".bin";
+    string neuron_index_filename = neuron_index_f.str();
+    neuron_index_f.str("");
+    ofstream neuron_index_outfile(neuron_index_filename, ios::out | ios::binary);
+    neuron_index_outfile.write(reinterpret_cast<const char*>(neuron_index.data()), size_neuron_index * sizeof(unsigned char));
+    neuron_index_outfile.close();
+    
+    unsigned long size_E_dCon_I = E_dCon_I.size();
+    stringstream E_dCon_I_f;
+    E_dCon_I_f<<"weight/" << "E_dCon_I_" <<str1<<".bin";
+    string E_dCon_I_filename = E_dCon_I_f.str();
+    E_dCon_I_f.str("");
+    ofstream E_dCon_I_outfile(E_dCon_I_filename, ios::out | ios::binary);
+    E_dCon_I_outfile.write(reinterpret_cast<const char*>(E_dCon_I.data()), size_E_dCon_I * sizeof(double));
+    E_dCon_I_outfile.close();
+#pragma omp parallel
+    {
+#pragma omp for
+        {
+            for (int i = 0; i<sqrt_nE; ++i) {
+                for (int j = 0; j<sqrt_nE; ++j){
+                    for (int k = 0; k < sqrt_nInput; ++k) {
+                        for (int l = 0; l < sqrt_nInput; ++l){
+                            img.at<double>(i*sqrt_nInput+k,j*sqrt_nInput+l) = In_E_weight.data()[(k*sqrt_nInput+l)*nE + i*sqrt_nE+j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Mat image(Size(a,a), CV_8UC1);
     convertScaleAbs(img, img, 255.0);
     uchar *dst_data = image.data;
     uchar *src_data = img.data;
@@ -239,7 +232,7 @@ void weight_save(vector<float> *In_E_weight, int nE, int nInput, int iteration){
     {
 #pragma omp for
         {
-            for (int i = 0; i < 28*40*28*40; ++i) {
+            for (int i = 0; i < b; ++i) {
                 dst_data[i] = src_data[i];
             }
         }
@@ -247,8 +240,9 @@ void weight_save(vector<float> *In_E_weight, int nE, int nInput, int iteration){
     imwrite(filename, image);
 }
 
-/*void spike_check(float &interval, float &E_total_spike, vector<float> *E_spike_total, int nE){
-    vector<float> temp(nE);
+
+/*void spike_check(double &interval, double &E_total_spike, vector<double> &E_spike_total, int nE){
+    vector<double> temp(nE);
     int check = 0;
 #pragma omp parallel
     {
@@ -256,7 +250,7 @@ void weight_save(vector<float> *In_E_weight, int nE, int nInput, int iteration){
 #pragma omp for
         {
             for (int i = 0; i<nE; ++i) {
-                if (E_spike_total->at(i) >= 1) {
+                if (E_spike_total.at(i) >= 1) {
                     check_private+=1;
                 }
             }

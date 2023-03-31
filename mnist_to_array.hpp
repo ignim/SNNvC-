@@ -18,11 +18,9 @@
 using namespace std;
 
 int ReverseInt(int i);
-void ReadMNIST(int NumberOfImages, int DataOfAnImage, vector<float> &arr, char train_or_test);
+void ReadMNIST(int NumberOfImages, int DataOfAnImage, vector<double> &arr, char train_or_test);
 void ReadMNISTLabel(int NumberOfImages, vector<int> &arr, char train_or_test);
-void normalization(vector<float> *In_E, int nInput, int nE);
-void spike_total(vector<float> *E_spike, vector<float> *E_spike_total, int nE, int simulate_time, float &E_total_spike);
-void weight_save(vector<float> *In_E_weight, int nE, int nInput, int iteration);
-//void spike_check(float &interval, float &E_total_spike, vector<float> *E_spike_total, int nE);
+void weight_save(vector<double> &In_E_weight, vector<double> &E_dCon_E, vector<double> &E_dCon_I, vector<double> &E_Con_E, vector<double> &E_Con_I, vector<double> &E_potential, vector<int> &neuron_index, int nE, int nInput, int iteration);
+//void spike_check(double &interval, double &E_total_spike, vector<double> &E_spike_total, int nE);
 
 #endif /* mnist_to_array_hpp */
